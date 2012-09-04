@@ -41,7 +41,7 @@ object clazz {
     def fields[Ann, I <: AnyRef, R, Args <: Product](apply: Symbol) = macro fieldsImpl[Ann, I, R, Args]
 
     /**
-     * Macro which inspects class 'I' and returns a list of fields annotated with annotation 'Ann' (or Nothing).
+     * Macro which inspects class 'I' and returns a list of all fields.
      * @tparam I type of class to scan for fields
      * @tparam R common super type of field values
      */
