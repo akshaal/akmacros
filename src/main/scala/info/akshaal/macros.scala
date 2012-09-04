@@ -15,7 +15,7 @@ object clazz {
      * @param get function that returns field value of an instance given as argument to the function
      * @param args list of arguments to the annotation found on the field
      */
-    case class Field[-I <: AnyRef, +R, +A <: Product](name: String, get: I => Any, args: A)
+    case class Field[-I <: AnyRef, +R, +A <: Product](name: String, get: I => R, args: A)
 
     /**
      * List of fields belonging to the given type.
