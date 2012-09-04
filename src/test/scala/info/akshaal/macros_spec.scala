@@ -123,7 +123,7 @@ class MacroSpec extends Specification with matcher.ScalaCheckMatchers {
                 def myToString(t: T): String = {
                     "{" + (fields map {
                         (field: clazz.Field[T, String, _]) =>
-                            field.name + ": " + field.get(t: T)
+                            field.name + ": " + field.get(t: T).trim
                     }).mkString(", ") + "}"
                 }
             }
