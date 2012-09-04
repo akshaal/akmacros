@@ -7,7 +7,7 @@ import org.ensime.sbt.util.SExp._
 object build extends Build {
     val sharedSettings = Defaults.defaultSettings ++ Seq(
         organization := "info.akshaal",
-        version := "0.2",
+        version := "0.3-SNAPSHOT",
         scalaVersion := "2.10.0-M7",
         scalacOptions ++= Seq("-unchecked", "-deprecation", "-feature"),
         javacOptions ++= Seq("-Xmx1536m", "-Xms512m", "-Xss10m"),
