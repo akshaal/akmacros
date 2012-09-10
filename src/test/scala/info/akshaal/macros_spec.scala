@@ -1,4 +1,4 @@
-/** Akshaal, 2012. http://akshaal.info */
+/** Evgeny Chukreev, 2012. http://akshaal.info */
 
 package info.akshaal
 
@@ -9,9 +9,13 @@ class MacroSpec extends Specification with matcher.ScalaCheckMatchers {
         "This is a specification for macros." ^
             "fields macro should work" ! (recordTest.example1 and personTest.example) ^
             "fields macro should work with arbitrary data" ! recordTest.example2 ^
-            "fields macro should support value transformation" ! transTest.example
+            "fields macro should support value transformation" ! transTest.example ^
+            "factory macro should support default parameter values" ! factoryTest.onlyDefaultsExample ^
+            "factory macro should work when there is no default value" ! factoryTest.noDefaultsExample ^
+            "factory macro should throw exception when no value and no defaults" ! factoryTest.exceptionDefaultsExample ^
+            "factory macro should handle abstract types" ! factoryTest.complicatedExample
 
-    import clazz.valueIdentity
+    import clazz.{valueIdentity, castValue}
 
     object personTest {
         type FormatFun = Any => Any
@@ -147,4 +151,123 @@ class MacroSpec extends Specification with matcher.ScalaCheckMatchers {
             (myToString(record2) must_== "{id: 11, name: cba, data: {name: test, value: {name: xyz, value: x}}}")
         }
     }
+
+    object factoryTest {
+        case class Z (a : String = "x", b : Int = 3)
+        val castingZFactory = clazz.factory[Any, Z]('castValue)
+
+        case class Kla (x : String = "x", y : Int)
+        val castingKlaFactory = clazz.factory[Any, Kla]('castValue)
+
+        def onlyDefaultsExample = castingZFactory(_ => None) must_== Z()
+
+        def noDefaultsExample =
+            castingKlaFactory {
+                case 'y => Some(10)
+                case _ => None
+            } must_== Kla(y = 10)
+
+        def overrideDefaultsExample =
+            castingKlaFactory {
+                case 'y => Some(11)
+                case 'x => Some("xxx")
+            } must_== Kla(x = "xxx", y = 11)
+
+        def exceptionDefaultsExample =
+            castingKlaFactory {
+                case 'y => None
+                case 'x => Some("abc")
+            } must throwAn[NoSuchElementException]
+
+        // Complicated test
+
+        trait S
+        case class SValue(x : Any) extends S
+        case class SMap(map : Map[Symbol, S]) extends S
+
+        trait MyParseable[T] {
+             def myParse(s : S) : T
+        }
+
+        implicit object PInt extends MyParseable[Int] {
+            def myParse(s : S) : Int = s match {
+                case SValue(x) => x.asInstanceOf[Int]
+            }
+        }
+
+        implicit object PString extends MyParseable[String] {
+            def myParse(s : S) : String = s match {
+                case SValue(x) => x.asInstanceOf[String]
+            }
+        }
+
+        def myValueParse[X : MyParseable](value: Option[S], symbol: Symbol): Option[X] =
+            value map (myParse[X](_))
+
+        def myParse[T : MyParseable](s : S) : T = implicitly[MyParseable[T]].myParse(s)
+
+        implicit def factoryToParseable[T <: AnyRef](implicit factory : clazz.Factory[S, T]) : MyParseable[T] = {
+            new MyParseable[T] {
+                def myParse(s : S) : T = {
+                    factory {
+                        sym =>
+                            s match {
+                                case SMap(m) => m get sym
+                            }
+                    }
+                }
+            }
+        }
+
+        // Test
+
+        def test() : Unit = {
+            case class CaseA(aaa : Int) extends Case
+            implicit def stm = clazz.factory[S, CaseA]('myValueParse)
+        }
+
+        sealed trait Case
+        case class CaseA(aaa : Int) extends Case
+        case class CaseB(bbb : String) extends Case
+        case class Term[T](name : String, value : T)
+        case class TermImp[T : MyParseable](name : String, value : T)
+
+        implicit def stm1[T : MyParseable] = clazz.factory[S, Term[T]]('myValueParse)
+        implicit val stm2 : clazz.Factory[S, CaseA] = clazz.factory[S, CaseA]('myValueParse)
+        implicit val stm3 : clazz.Factory[S, CaseB] = clazz.factory[S, CaseB]('myValueParse)
+        implicit def stm4[T : MyParseable] : clazz.Factory[S, TermImp[T]] = clazz.factory[S, TermImp[T]]('myValueParse)
+
+        implicit val caseParseable =
+            AbstractParseable[Case](itHas('aaa) -> stm2).or(itHas('bbb) -> stm3)
+
+        case class AbstractParseable[T <: AnyRef] (cases : Seq[(SMap => Boolean, clazz.Factory[S, T])]) extends MyParseable[T] {
+            def myParse(s : S) : T = s match {
+                case smap: SMap =>
+                    (cases find (_._1(smap)) map (_._2) map(factoryToParseable(_).myParse(s))).get
+            }
+
+            def or(aCase : (SMap => Boolean, clazz.Factory[S, T])) : AbstractParseable[T] =
+                new AbstractParseable (cases ++ List(aCase))
+        }
+
+        object AbstractParseable {
+            def apply[T <: AnyRef] (aCase : (SMap => Boolean, clazz.Factory[S, T])) : AbstractParseable[T] =
+                new AbstractParseable (List(aCase))
+        }
+
+        def itHas(sym : Symbol) = (smap : SMap) => smap.map.contains(sym)
+
+        val caseA1S = SMap(Map('aaa -> SValue(3)))
+        val term1S = SMap(Map('name -> SValue("abc"), 'value -> caseA1S))
+
+        val caseB2S = SMap(Map('bbb -> SValue("x")))
+        val term2S = SMap(Map('name -> SValue("mno"), 'value -> caseB2S))
+
+        def complicatedExample =
+            (myParse[Term[Case]](term1S) must_== Term(name = "abc", value = CaseA(3))) and
+            (myParse[Term[Case]](term2S) must_== Term(name = "mno", value = CaseB("x"))) and
+            (myParse[TermImp[Case]](term2S) must_== TermImp(name = "mno", value = CaseB("x")))
+    }
 }
+
+//  LocalWords:  abc myValueParse mno BillGates cba xyz

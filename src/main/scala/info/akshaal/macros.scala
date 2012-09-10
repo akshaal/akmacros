@@ -1,8 +1,9 @@
-/** Akshaal, 2012. http://akshaal.info */
+/** Evgeny Chukreev, 2012. http://akshaal.info */
 
 package info.akshaal
 
 import language.experimental.macros
+import scala.language.existentials
 import scala.reflect.macros.Context
 import scala.annotation.Annotation
 
@@ -10,7 +11,100 @@ import scala.annotation.Annotation
  * Macros for traversing over class elements.
  */
 object clazz {
-    def valueIdentity[X] (value : X, annotationArgs : Any) : X = value
+    def valueIdentity[X](value: X, annotationArgs: Any): X = value
+    def castValue[X](value: Option[Any], symbol: Symbol): Option[X] = value map (_.asInstanceOf[X])
+
+    /**
+     * Class factory type.
+     * @tparam F type of value that parameter provider function should return
+     * @tparam T type of value that this factory creates
+     */
+    type Factory[F, T] = Function1[Function1[Symbol, Option[F]], T]
+
+    /**
+     * Macro to create a factory for the given type I.
+     * @tparam I factory will be generated for this type
+     * @tparam F type of values that provider function should return
+     * @param apply symbol of the function to use to convert from provider function results into class parameter values
+     */
+    def factory[F, I <: AnyRef](apply: Symbol): Factory[F, I] = macro factoryImpl[F, I]
+
+    /**
+     * Implementation of the factory macro.
+     */
+    def factoryImpl[F: c.AbsTypeTag, I <: AnyRef: c.AbsTypeTag](c: Context)(apply: c.Expr[Symbol]): c.Expr[Factory[F, I]] = {
+        import c.universe._
+
+        val applyFunName =
+            apply.tree match {
+                case Apply(_, List(Literal(Constant(s)))) => s.toString
+                case _ =>
+                    c.abort(apply.tree.pos,
+                            "factory macro is expected to be used with symbol literal like 'castValue")
+            }
+
+        // Workaround for unavailable nme.defaultGetterName (borrowed from compiler internals)
+        val DEFAULT_GETTER_INIT_STRING = "$lessinit$greater"
+        val DEFAULT_GETTER_STRING = "$default$"
+        def defaultGetterName(pos: Int): TermName = {
+            newTermName(DEFAULT_GETTER_INIT_STRING + DEFAULT_GETTER_STRING + pos)
+        }
+
+        // Materialize types
+        val instanceT = implicitly[c.AbsTypeTag[I]].tpe
+        val constructor = instanceT.declaration(nme.CONSTRUCTOR).asMethod
+        val companionSymbol = instanceT.typeSymbol.companionSymbol
+
+        val paramTreeSets =
+            constructor.params.take(1) map {
+                paramSet =>
+                    paramSet.zipWithIndex map {
+                        case (param, paramZeroIndex) =>
+                            val paramRealType = param.typeSignature.asSeenFrom(instanceT, instanceT.typeSymbol)
+
+                            val symbolNameExpr = c.literal(param.name.toString.trim)
+                            val symbolTree = reify ( scala.Symbol(symbolNameExpr.splice) ).tree
+                            val applyFunTree = c.parse(applyFunName)
+
+                            val fCallTree = Apply(Ident(newTermName("f")), List(symbolTree))
+
+                            val applyFunApplicationTree =
+                                treeBuild.mkMethodCall(applyFunTree,
+                                                       List(paramRealType),
+                                                       List(fCallTree, symbolTree))
+
+                            val paramValueTree =
+                                if (param.asTerm.isParamWithDefault) {
+                                    val defaultGetterTree =
+                                        Select(treeBuild.mkAttributedRef(companionSymbol),
+                                               defaultGetterName(paramZeroIndex + 1))
+
+                                    Apply (Select (applyFunApplicationTree, newTermName("getOrElse")),
+                                           List(defaultGetterTree))
+                                } else {
+                                    Select (applyFunApplicationTree, newTermName("get"))
+                                }
+
+                            paramValueTree
+                    }
+            }
+
+        val constructorCallTree =
+            paramTreeSets.foldLeft(Select(New(treeBuild.mkAttributedRef(instanceT.typeSymbol)),
+                                          nme.CONSTRUCTOR) : Tree)(
+                treeBuild.mkMethodCall(_: Tree, _)
+            )
+
+        val constructorCallExpr = c.Expr[I](constructorCallTree)
+
+        reify {
+            new Factory[F, I] {
+                def apply(f: scala.Symbol => Option[F]): I = {
+                    constructorCallExpr.splice
+                }
+            }
+        }
+    }
 
     /**
      * An object of this class represents a class field.
@@ -62,7 +156,7 @@ object clazz {
                 case Apply(_, List(Literal(Constant(s)))) => s.toString
                 case _ =>
                     c.abort(apply.tree.pos,
-                        "fields macro is expected to be used with symbol literal like 'nothing or 'myFunction")
+                        "fields macro is expected to be used with symbol literal like 'valueIdentity")
             }
 
         // Get annotated fields. Note that hasAnnotation doesn't work for a reason...
@@ -110,7 +204,7 @@ object clazz {
                 val getFunBodyTree =
                     treeBuild.mkMethodCall(applyFunTree,
                         List(Select(Ident(newTermName("x")), newTermName(name)),
-                             argsTree))
+                            argsTree))
 
                 val getFunExpr = c.Expr[I => R](Function(List(getFunArgTree), getFunBodyTree))
 
@@ -124,4 +218,5 @@ object clazz {
     }
 }
 
-//  LocalWords:  args TupleX Tuple argTrees
+//  LocalWords:  args TupleX Tuple argTrees nme defaultGetterName
+//  LocalWords:  lessinit getOrElse
