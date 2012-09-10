@@ -10,7 +10,7 @@ object build extends Build {
         homepage := Some(url("http://www.akshaal.info/search/label/macro")),
 
         organization := "info.akshaal",
-        version := "0.3",
+        version := "0.4-SNAPSHOT",
 
         scalaVersion := "2.10.0-M7",
         scalacOptions ++= Seq("-unchecked", "-deprecation", "-feature"),
