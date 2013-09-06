@@ -32,7 +32,7 @@ object clazz {
     /**
      * Implementation of the factory macro.
      */
-    def factoryImpl[F: c.AbsTypeTag, I <: AnyRef: c.AbsTypeTag](c: Context)(apply: c.Expr[Symbol]): c.Expr[Factory[F, I]] = {
+    def factoryImpl[F: c.WeakTypeTag, I <: AnyRef: c.WeakTypeTag](c: Context)(apply: c.Expr[Symbol]): c.Expr[Factory[F, I]] = {
         import c.universe._
 
         val applyFunName =
@@ -51,12 +51,12 @@ object clazz {
         }
 
         // Materialize types
-        val instanceT = implicitly[c.AbsTypeTag[I]].tpe
+        val instanceT = implicitly[c.WeakTypeTag[I]].tpe
         val constructor = instanceT.declaration(nme.CONSTRUCTOR).asMethod
         val companionSymbol = instanceT.typeSymbol.companionSymbol
 
         val paramTreeSets =
-            constructor.params.take(1) map {
+            constructor.paramss.take(1) map {
                 paramSet =>
                     paramSet.zipWithIndex map {
                         case (param, paramZeroIndex) =>
@@ -144,12 +144,12 @@ object clazz {
     /**
      * Implementation of the fields macro.
      */
-    def fieldsImpl[Ann: c.AbsTypeTag, I <: AnyRef: c.AbsTypeTag, R: c.AbsTypeTag, Args <: Product: c.AbsTypeTag](c: Context)(apply: c.Expr[Symbol]): c.Expr[Fields[I, R, Args]] = {
+    def fieldsImpl[Ann: c.WeakTypeTag, I <: AnyRef: c.WeakTypeTag, R: c.WeakTypeTag, Args <: Product: c.WeakTypeTag](c: Context)(apply: c.Expr[Symbol]): c.Expr[Fields[I, R, Args]] = {
         import c.universe._
 
         // Materialize types
-        val instanceT = implicitly[c.AbsTypeTag[I]].tpe
-        val annT = implicitly[c.AbsTypeTag[Ann]].tpe
+        val instanceT = implicitly[c.WeakTypeTag[I]].tpe
+        val annT = implicitly[c.WeakTypeTag[Ann]].tpe
 
         val applyFunName =
             apply.tree match {
@@ -165,11 +165,11 @@ object clazz {
             if (allFields) {
                 instanceT.members filter (member => member.asTerm.isGetter && member.isPublic)
             } else {
-                instanceT.members filter (member => member.getAnnotations.exists(_.atp == annT))
+                instanceT.members filter (member => member.annotations.exists(_.tpe == annT))
             }
 
         // Fold given expression sequence into a new expression that creates List of expressions at runtime
-        def foldIntoListExpr[T: c.AbsTypeTag](exprs: Iterable[c.Expr[T]]): c.Expr[List[T]] =
+        def foldIntoListExpr[T: c.WeakTypeTag](exprs: Iterable[c.Expr[T]]): c.Expr[List[T]] =
             exprs.foldLeft(reify { Nil: List[T] }) {
                 (accumExpr, expr) =>
                     reify { expr.splice :: accumExpr.splice }
@@ -183,7 +183,7 @@ object clazz {
 
                 // Construct arguments list expression
                 val argsTree = {
-                    lazy val argTrees = field.getAnnotations.find(_.atp == annT).get.args
+                    lazy val argTrees = field.annotations.find(_.tpe == annT).get.scalaArgs
 
                     if (allFields || argTrees.isEmpty) {
                         Select(Ident(newTermName("scala")), newTermName("None"))

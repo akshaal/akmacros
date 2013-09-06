@@ -5,6 +5,7 @@ import org.ensime.sbt.Plugin.Settings.ensimeConfig
 import org.ensime.sbt.util.SExp._
 
 object build extends Build {
+
     val sharedSettings = Defaults.defaultSettings ++ Seq(
         licenses := Seq("Apache 2.0" -> url("http://opensource.org/licenses/apache2.0.php")),
         homepage := Some(url("http://www.akshaal.info/search/label/macro")),
@@ -12,7 +13,7 @@ object build extends Build {
         organization := "info.akshaal",
         version := "0.4-SNAPSHOT",
 
-        scalaVersion := "2.10.0-M7",
+        scalaVersion := "2.10.2",
         scalacOptions ++= Seq("-unchecked", "-deprecation", "-feature"),
         javacOptions ++= Seq("-Xmx1536m", "-Xms512m", "-Xss10m"),
         javaOptions ++= Seq("-Xmx1536m", "-Xms512m", "-Xss10m"),
@@ -22,8 +23,8 @@ object build extends Build {
                 "org.scala-lang" % "scala-reflect" % scala_version % "provided",
 
                 // Test dependencies
-                "org.specs2" %% "specs2" % "1.12.1.1" % "test" cross CrossVersion.full,
-                "org.scalacheck" % "scalacheck" % "1.10.0" % "test" cross CrossVersion.full
+                "org.specs2" %% "specs2" % "2.1.1" % "test",
+                "org.scalacheck" %% "scalacheck" % "1.10.1" % "test"
             )
         },
 
@@ -65,6 +66,7 @@ object build extends Build {
             </developers>
         )
     )
+
 
     lazy val root = Project(
         id = "macros",
