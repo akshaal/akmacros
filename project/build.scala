@@ -5,6 +5,7 @@ import org.ensime.sbt.Plugin.Settings.ensimeConfig
 import org.ensime.sbt.util.SExp._
 
 object build extends Build {
+
     val sharedSettings = Defaults.defaultSettings ++ Seq(
         licenses := Seq("Apache 2.0" -> url("http://opensource.org/licenses/apache2.0.php")),
         homepage := Some(url("http://www.akshaal.info/search/label/macro")),
@@ -65,6 +66,7 @@ object build extends Build {
             </developers>
         )
     )
+
 
     lazy val root = Project(
         id = "macros",
